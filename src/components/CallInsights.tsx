@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { CallRecord } from "@/lib/types";
 import { SalesStatusBadge } from "./SalesStatusBadge";
 
@@ -19,7 +20,15 @@ function List({ title, items }: { title: string; items: string[] }) {
 }
 
 // Recording player, AI summary and sales status for one call. Reused on the history page.
-export function CallInsights({ call, recordingPending }: { call: CallRecord; recordingPending?: boolean }) {
+export function CallInsights({
+  call,
+  recordingPending,
+  recordingFallback,
+}: {
+  call: CallRecord;
+  recordingPending?: boolean;
+  recordingFallback?: ReactNode;
+}) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
@@ -31,10 +40,10 @@ export function CallInsights({ call, recordingPending }: { call: CallRecord; rec
         <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Recording</h4>
         {call.recording_url ? (
           <audio controls src={call.recording_url} className="w-full" preload="metadata" />
+        ) : recordingPending ? (
+          <p className="text-sm text-slate-400">Processing recording…</p>
         ) : (
-          <p className="text-sm text-slate-400">
-            {recordingPending ? "Processing recording…" : "Recording not available."}
-          </p>
+          (recordingFallback ?? <p className="text-sm text-slate-400">Recording not available.</p>)
         )}
       </div>
 

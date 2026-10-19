@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useSaveCall } from "@/hooks/useSaveCall";
 import { useVoiceCall } from "@/hooks/useVoiceCall";
@@ -134,6 +135,12 @@ export function CallScreen() {
                 <p className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{saved.analysisError}</p>
               )}
               <CallInsights call={saved.call} recordingPending={saved.recordingPending} />
+              <Link
+                href={`/history/${saved.call.id}`}
+                className="mt-4 inline-block text-sm font-medium text-indigo-600 hover:underline"
+              >
+                View in call history →
+              </Link>
             </>
           )}
         </section>

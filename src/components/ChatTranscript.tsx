@@ -7,6 +7,7 @@ type Props = {
   lines: TranscriptLine[];
   partial?: { role: TranscriptLine["role"]; text: string } | null;
   emptyText?: string;
+  autoScroll?: boolean;
 };
 
 function Bubble({ role, text, live }: { role: TranscriptLine["role"]; text: string; live?: boolean }) {
@@ -28,12 +29,20 @@ function Bubble({ role, text, live }: { role: TranscriptLine["role"]; text: stri
   );
 }
 
-export function ChatTranscript({ lines, partial, emptyText = "The conversation will appear here." }: Props) {
+export function ChatTranscript({
+  lines,
+  partial,
+  emptyText = "The conversation will appear here.",
+  autoScroll = true,
+}: Props) {
   const endRef = useRef<HTMLDivElement>(null);
 
+  // Scroll only the chat panel, not the whole page.
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [lines, partial]);
+    if (!autoScroll) return;
+    const panel = endRef.current?.closest(".overflow-y-auto");
+    panel?.scrollTo({ top: panel.scrollHeight, behavior: "smooth" });
+  }, [lines, partial, autoScroll]);
 
   if (lines.length === 0 && !partial) {
     return <p className="grid h-full place-items-center text-sm text-slate-400">{emptyText}</p>;
