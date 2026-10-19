@@ -81,11 +81,13 @@ export function useVoiceCall() {
       }
     });
     vapi.on("call-end", () => {
-      const started = startedAtRef.current ?? Date.now();
+      const started = startedAtRef.current;
       const ended = Date.now();
       setBotSpeaking(false);
       setPartial(null);
-      setStatus("ended");
+      setStatus((s) => (s === "error" ? s : "ended"));
+      // A call that never connected has nothing to save.
+      if (!started) return;
       setFinishedCall({
         callId: callIdRef.current,
         language: languageRef.current,
