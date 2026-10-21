@@ -22,34 +22,48 @@ function List({ title, items }: { title: string; items: string[] }) {
 // Recording player, AI summary and sales status for one call. Reused on the history page.
 export function CallInsights({
   call,
-  recordingPending,
-  recordingFallback,
+  pending,
+  refreshAction,
 }: {
   call: CallRecord;
-  recordingPending?: boolean;
-  recordingFallback?: ReactNode;
+  pending?: boolean;
+  refreshAction?: ReactNode;
 }) {
+  const missing = !call.recording_url || !call.status;
+  const waiting = <p className="text-sm text-slate-400">Processing…</p>;
+
   return (
     <div className="space-y-4">
+      {missing && !pending && refreshAction && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
+          <span>Some results are not ready yet.</span>
+          {refreshAction}
+        </div>
+      )}
+
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold">Sales status</h3>
-        <SalesStatusBadge status={call.status} />
+        <SalesStatusBadge status={call.status} pending={pending} />
       </div>
 
       <div>
         <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Recording</h4>
         {call.recording_url ? (
           <audio controls src={call.recording_url} className="w-full" preload="metadata" />
-        ) : recordingPending ? (
-          <p className="text-sm text-slate-400">Processing recording…</p>
+        ) : pending ? (
+          waiting
         ) : (
-          (recordingFallback ?? <p className="text-sm text-slate-400">Recording not available.</p>)
+          <p className="text-sm text-slate-400">Recording not available.</p>
         )}
       </div>
 
       <div>
         <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">AI summary</h4>
-        <p className="text-sm leading-relaxed text-slate-700">{call.summary ?? "No summary available."}</p>
+        {!call.summary && pending ? (
+          waiting
+        ) : (
+          <p className="text-sm leading-relaxed text-slate-700">{call.summary ?? "No summary available."}</p>
+        )}
       </div>
 
       <List title="Customer requirements" items={call.requirements} />

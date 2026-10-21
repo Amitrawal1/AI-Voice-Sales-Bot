@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { analyzeCall } from "@/lib/analyzeCall";
+import { noResponseAnalysis } from "@/lib/analysis";
 import { getSupabase } from "@/lib/supabase";
-
-export const maxDuration = 60;
 
 const CreateCallBody = z.object({
   callId: z.string().nullable(),
@@ -31,10 +29,8 @@ export async function POST(req: Request) {
   const parsed = CreateCallBody.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: "Invalid call data" }, { status: 400 });
   const body = parsed.data;
-  const supabase = getSupabase();
 
-  // Save the transcript first so the call is never lost, even if the analysis fails.
-  const { data: row, error } = await supabase
+  const { data: row, error } = await getSupabase()
     .from("calls")
     .insert({
       vapi_call_id: body.callId,
@@ -44,23 +40,11 @@ export async function POST(req: Request) {
       duration_sec: body.durationSec,
       transcript: body.transcript,
       consent_given: body.consent,
+      // The AI analysis comes from Vapi later; a silent call is classified right away.
+      ...noResponseAnalysis(body.transcript),
     })
     .select()
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  try {
-    const analysis = await analyzeCall(body.transcript);
-    const { data: updated, error: updateError } = await supabase
-      .from("calls")
-      .update(analysis)
-      .eq("id", row.id)
-      .select()
-      .single();
-    if (updateError) throw updateError;
-    return NextResponse.json(updated);
-  } catch (e) {
-    console.error("Call analysis failed", e);
-    return NextResponse.json({ ...row, analysisError: "AI summary could not be generated." });
-  }
+  return NextResponse.json(row);
 }

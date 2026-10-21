@@ -7,10 +7,10 @@ import type { CallRecord } from "@/lib/types";
 type SaveState =
   | { phase: "idle" }
   | { phase: "saving" }
-  | { phase: "saved"; call: CallRecord; recordingPending: boolean; analysisError?: string }
+  | { phase: "saved"; call: CallRecord; syncing: boolean; syncError?: string }
   | { phase: "error"; message: string };
 
-// Saves a finished call, gets the AI analysis, then waits for the recording.
+// Saves a finished call, then waits for Vapi's recording and AI analysis.
 export function useSaveCall(finished: FinishedCall | null) {
   const [state, setState] = useState<SaveState>({ phase: "idle" });
 
@@ -33,20 +33,19 @@ export function useSaveCall(finished: FinishedCall | null) {
         if (!res.ok) throw new Error(data.error ?? "Could not save the call");
         if (cancelled) return;
 
-        const call = data as CallRecord & { analysisError?: string };
-        const hasRecording = Boolean(call.vapi_call_id);
-        setState({ phase: "saved", call, recordingPending: hasRecording, analysisError: call.analysisError });
-        if (!hasRecording) return;
+        const call = data as CallRecord;
+        const needsSync = Boolean(call.vapi_call_id);
+        setState({ phase: "saved", call, syncing: needsSync });
+        if (!needsSync) return;
 
-        const recRes = await fetch(`/api/calls/${call.id}/recording`, { method: "POST" });
-        const rec = recRes.ok ? ((await recRes.json()) as { recording_url: string | null }) : { recording_url: null };
+        const syncRes = await fetch(`/api/calls/${call.id}/sync`, { method: "POST" });
+        const synced = await syncRes.json();
         if (cancelled) return;
-        setState({
-          phase: "saved",
-          call: { ...call, recording_url: rec.recording_url },
-          recordingPending: false,
-          analysisError: call.analysisError,
-        });
+        setState(
+          syncRes.ok
+            ? { phase: "saved", call: synced as CallRecord, syncing: false }
+            : { phase: "saved", call, syncing: false, syncError: synced.error ?? "Could not get the call results" },
+        );
       } catch (e) {
         if (!cancelled) setState({ phase: "error", message: e instanceof Error ? e.message : "Could not save the call" });
       }

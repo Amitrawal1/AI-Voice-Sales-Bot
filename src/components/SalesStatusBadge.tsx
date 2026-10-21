@@ -9,11 +9,11 @@ const STYLES: Record<SalesStatus, string> = {
   "No Response": "bg-slate-100 text-slate-600 ring-slate-200",
 };
 
-export function SalesStatusBadge({ status }: { status: SalesStatus | null }) {
+export function SalesStatusBadge({ status, pending }: { status: SalesStatus | null; pending?: boolean }) {
   if (!status) {
     return (
       <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500 ring-1 ring-slate-200">
-        Not analysed
+        {pending ? "Analysing…" : "Not analysed"}
       </span>
     );
   }

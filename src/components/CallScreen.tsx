@@ -125,16 +125,22 @@ export function CallScreen() {
           {saved.phase === "saving" && (
             <p className="flex items-center gap-2 text-sm text-slate-600">
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
-              Saving the call and generating the AI summary…
+              Saving the call…
             </p>
           )}
           {saved.phase === "error" && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{saved.message}</p>}
           {saved.phase === "saved" && (
             <>
-              {saved.analysisError && (
-                <p className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{saved.analysisError}</p>
+              {saved.syncing && (
+                <p className="mb-4 flex items-center gap-2 text-sm text-slate-600">
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
+                  Generating the AI summary and processing the recording…
+                </p>
               )}
-              <CallInsights call={saved.call} recordingPending={saved.recordingPending} />
+              {saved.syncError && (
+                <p className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{saved.syncError}</p>
+              )}
+              <CallInsights call={saved.call} pending={saved.syncing} />
               <Link
                 href={`/history/${saved.call.id}`}
                 className="mt-4 inline-block text-sm font-medium text-indigo-600 hover:underline"

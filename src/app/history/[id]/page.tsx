@@ -2,8 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CallInsights } from "@/components/CallInsights";
 import { ChatTranscript } from "@/components/ChatTranscript";
-import { FetchRecordingButton } from "@/components/FetchRecordingButton";
 import { SetupNotice } from "@/components/SetupNotice";
+import { SyncFromVapiButton } from "@/components/SyncFromVapiButton";
 import { getCall } from "@/lib/calls";
 import { formatDateTime, formatDuration } from "@/lib/format";
 import type { CallRecord } from "@/lib/types";
@@ -38,7 +38,7 @@ export default async function CallDetailPage({ params }: { params: Promise<{ id:
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <CallInsights
             call={call}
-            recordingFallback={call.vapi_call_id ? <FetchRecordingButton callId={call.id} /> : undefined}
+            refreshAction={call.vapi_call_id ? <SyncFromVapiButton callId={call.id} /> : undefined}
           />
         </section>
 

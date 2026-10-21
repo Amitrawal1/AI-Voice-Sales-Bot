@@ -13,7 +13,7 @@ An AI salesperson ("Priya") that sells **FlowCRM**, a CRM for small businesses, 
 | Live chat screen | Bot and customer messages appear as chat bubbles in real time, including words still being spoken. |
 | Call controls | Start Call / End Call, live mm:ss timer, call status (Ready, Connecting, Live, Ending, Ended, Error) and a speaking/listening indicator. |
 | Call recording + consent | The user must tick a recording-consent box before the call can start, and the bot says the call is recorded. The recording is fetched from Vapi after the call and can be played back. |
-| AI summary | Claude reads the transcript and returns a summary, customer requirements, objections and next steps as validated structured output. |
+| AI summary | At the end of each call, Vapi's analysis step reads the transcript and returns a summary, customer requirements, objections and next steps as structured JSON. The server checks the result against a schema before saving it. |
 | Sales status | One of: Converted, Interested, Follow-up Required, Not Interested, Demo Requested, No Response. If the customer never speaks, the status is set to No Response automatically. |
 | Call history | `/history` lists every call with date, duration, language and status, with filters by status. Each call opens to show its recording, summary, insights and full transcript. |
 
@@ -28,19 +28,18 @@ Start Call ──► Vapi Web SDK ◄──► Vapi cloud (STT → Claude → TT
 Chat bubbles, timer, status
    │
 End Call ─────────────────────────────►  POST /api/calls
-                                            ├─ save transcript to Supabase
-                                            └─ Claude → summary + status → update row
+                                            └─ save transcript to Supabase
+          ─────────────────────────────►  POST /api/calls/:id/sync
+                                            └─ poll Vapi API for AI analysis
+                                               (summary + status) and recording → save
           ◄──────── results card ─────────
-          ─────────────────────────────►  POST /api/calls/:id/recording
-                                            └─ poll Vapi API for recording URL → save
 History page ─────────────────────────►  Supabase (server-side read)
 ```
 
 ## Tech stack
 
 - **Next.js 15** (App Router, TypeScript, Tailwind CSS), deployed on Vercel
-- **Vapi Web SDK**: real-time voice, transcription and recording
-- **Claude** (Anthropic API): sales conversation (through Vapi) and post-call analysis
+- **Vapi Web SDK**: real-time voice, transcription, recording and post-call AI analysis. The conversation runs on Claude through Vapi, so no separate LLM API key is needed.
 - **Supabase** (Postgres): call history storage
 
 ## Run locally
@@ -48,7 +47,6 @@ History page ──────────────────────�
 1. Install dependencies: `npm install`
 2. Copy `.env.example` to `.env.local` and fill in:
    - `NEXT_PUBLIC_VAPI_PUBLIC_KEY`, `VAPI_PRIVATE_KEY`: Vapi dashboard → API Keys
-   - `ANTHROPIC_API_KEY`: console.anthropic.com
    - `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`: Supabase → Project Settings → API
 3. In the Supabase SQL editor, run `supabase/schema.sql`.
 4. `npm run dev`, open http://localhost:3000 in Chrome and allow microphone access.
@@ -65,13 +63,13 @@ src/
     page.tsx                         Call screen
     history/page.tsx                 Call history list
     history/[id]/page.tsx            Call detail
-    api/calls/route.ts               Save call + AI analysis, list calls
-    api/calls/[id]/recording/route.ts  Fetch recording from Vapi
+    api/calls/route.ts               Save call, list calls
+    api/calls/[id]/sync/route.ts     Fetch AI analysis + recording from Vapi
   components/                        Call screen, chat, badges, insights
   hooks/useVoiceCall.ts              Vapi call state, timer, live transcript
-  hooks/useSaveCall.ts               Save + analyse + recording after the call
+  hooks/useSaveCall.ts               Save call, then wait for analysis + recording
   lib/assistant.ts                   Sales prompt and voice settings
-  lib/analyzeCall.ts                 Claude summary + status (structured output)
+  lib/analysis.ts                    AI summary + status prompt and schema (run by Vapi)
   lib/product.ts                     Product being sold
 supabase/schema.sql                  Database table
 ```

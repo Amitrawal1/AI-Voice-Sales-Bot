@@ -1,4 +1,5 @@
 import type { CreateAssistantDTO } from "@vapi-ai/web/dist/api";
+import { structuredDataPlan } from "./analysis";
 import { PRODUCT } from "./product";
 
 export type CallLanguage = "en" | "hi";
@@ -68,6 +69,7 @@ export function buildAssistant(language: CallLanguage): CreateAssistantDTO {
       ? { provider: "deepgram", model: "nova-3", language: "multi" }
       : { provider: "deepgram", model: "nova-3", language: "en" },
     artifactPlan: { recordingEnabled: true, recordingFormat: "mp3" },
+    analysisPlan: { summaryPlan: { enabled: false }, structuredDataPlan },
     endCallPhrases: ["goodbye", "bye bye", "have a great day", "alvida"],
     endCallMessage: hindi ? "Dhanyavaad, aapka din shubh ho!" : "Thanks for your time, have a great day!",
     maxDurationSeconds: 600,

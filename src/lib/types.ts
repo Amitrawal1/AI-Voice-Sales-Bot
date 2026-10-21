@@ -9,6 +9,14 @@ export const SALES_STATUSES = [
 
 export type SalesStatus = (typeof SALES_STATUSES)[number];
 
+export type CallAnalysis = {
+  summary: string;
+  requirements: string[];
+  objections: string[];
+  next_steps: string[];
+  status: SalesStatus;
+};
+
 export type TranscriptLine = {
   role: "assistant" | "user";
   text: string;
