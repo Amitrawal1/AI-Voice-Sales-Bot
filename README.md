@@ -1,75 +1,61 @@
-# FlowCRM AI Voice Sales Bot
+# AI Voice Sales Bot
 
-An AI salesperson ("Priya") that sells **FlowCRM**, a CRM for small businesses, over a live voice call in the browser. It shows the conversation as text while it happens. When the call ends it saves the recording, writes an AI summary and assigns a sales status. Every call is kept in a searchable call history.
+Voice bot that calls you from the browser and tries to sell **FlowCRM**, a made-up CRM for small businesses. You talk to it like a normal sales call, see the conversation as text while it happens, and when the call ends you get the recording, a short summary and a sales status.
 
-**Live demo:** _add your Vercel link here_
+Built for the Sankar Group intern assignment.
+
+**Live:** _add Vercel link_
 
 ## Features
 
-| Requirement | How it works |
-|---|---|
-| Voice conversation | Real-time voice call through [Vapi](https://vapi.ai): Deepgram speech-to-text, Claude as the sales brain, natural text-to-speech. The bot asks about the customer's needs, pitches matching features, handles objections and tries to close (free trial or demo). |
-| Language | English or Hindi/Hinglish, chosen before the call. |
-| Live chat screen | Bot and customer messages appear as chat bubbles in real time, including words still being spoken. |
-| Call controls | Start Call / End Call, live mm:ss timer, call status (Ready, Connecting, Live, Ending, Ended, Error) and a speaking/listening indicator. |
-| Call recording + consent | The user must tick a recording-consent box before the call can start, and the bot says the call is recorded. The recording is fetched from Vapi after the call and can be played back. |
-| AI summary | At the end of each call, Vapi's analysis step reads the transcript and returns a summary, customer requirements, objections and next steps as structured JSON. The server checks the result against a schema before saving it. |
-| Sales status | One of: Converted, Interested, Follow-up Required, Not Interested, Demo Requested, No Response. If the customer never speaks, the status is set to No Response automatically. |
-| Call history | `/history` lists every call with date, duration, language and status, with filters by status. Each call opens to show its recording, summary, insights and full transcript. |
+- Voice call with an AI sales rep ("Priya") in English or Hindi/Hinglish. She asks about your business, explains relevant features, handles objections (price, already using Excel, no time...) and tries to get you to start a trial or book a demo.
+- Live transcript in a chat view
+- Start / End call, timer and call status
+- Asks for recording consent before the call starts; recording can be played back afterwards
+- Summary with customer requirements, objections and next steps
+- Sales status: Converted, Interested, Follow-up Required, Not Interested, Demo Requested or No Response
+- Call history page with filters by status, and a detail page per call (recording, summary, transcript)
+
+## Stack
+
+- Next.js 15 + TypeScript + Tailwind
+- [Vapi](https://vapi.ai) for the voice part: Deepgram for speech-to-text, Claude Sonnet as the model, Vapi/Azure voices for text-to-speech, plus call recording and the post-call analysis
+- Supabase (Postgres) to store calls
+- Deployed on Vercel
 
 ## How it works
 
+1. The browser starts a call with the Vapi web SDK. The assistant config (prompt, voice, transcriber, recording, analysis) is in `src/lib/assistant.ts`.
+2. Transcript events from Vapi are shown in the chat as they come in.
+3. When the call ends, the transcript is saved through `POST /api/calls`.
+4. Vapi takes a few seconds to finish the recording and the analysis, so `POST /api/calls/[id]/sync` polls the Vapi API and stores both once they are ready.
+5. The history pages read straight from Supabase.
+
+If the customer doesn't say anything, the call is marked "No Response" right away without waiting for the analysis.
+
+## Running locally
+
+```bash
+npm install
+cp .env.example .env.local   # then fill in the keys
+npm run dev
 ```
-Browser (Next.js)                          Server (Next.js API routes)
-─────────────────                          ───────────────────────────
-Start Call ──► Vapi Web SDK ◄──► Vapi cloud (STT → Claude → TTS, records audio)
-   │  live transcript events
-   ▼
-Chat bubbles, timer, status
-   │
-End Call ─────────────────────────────►  POST /api/calls
-                                            └─ save transcript to Supabase
-          ─────────────────────────────►  POST /api/calls/:id/sync
-                                            └─ poll Vapi API for AI analysis
-                                               (summary + status) and recording → save
-          ◄──────── results card ─────────
-History page ─────────────────────────►  Supabase (server-side read)
-```
 
-## Tech stack
+You need:
 
-- **Next.js 15** (App Router, TypeScript, Tailwind CSS), deployed on Vercel
-- **Vapi Web SDK**: real-time voice, transcription, recording and post-call AI analysis. The conversation runs on Claude through Vapi, so no separate LLM API key is needed.
-- **Supabase** (Postgres): call history storage
+- Vapi public and private keys (Vapi dashboard → API Keys)
+- Supabase project URL and secret key (Project Settings → API)
 
-## Run locally
+Run `supabase/schema.sql` once in the Supabase SQL editor to create the `calls` table.
 
-1. Install dependencies: `npm install`
-2. Copy `.env.example` to `.env.local` and fill in:
-   - `NEXT_PUBLIC_VAPI_PUBLIC_KEY`, `VAPI_PRIVATE_KEY`: Vapi dashboard → API Keys
-   - `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`: Supabase → Project Settings → API
-3. In the Supabase SQL editor, run `supabase/schema.sql`.
-4. `npm run dev`, open http://localhost:3000 in Chrome and allow microphone access.
+Use Chrome and allow microphone access.
 
-## Customising the product
+## Changing the product
 
-Edit `src/lib/product.ts` to sell a different SaaS product: name, features, pricing, offer and objection answers. The sales prompt in `src/lib/assistant.ts` is built from it.
+Product details, pricing and objection answers are in `src/lib/product.ts`. The sales prompt is generated from that file, so you can switch the bot to a different product by editing it.
 
-## Project structure
+## Known limitations
 
-```
-src/
-  app/
-    page.tsx                         Call screen
-    history/page.tsx                 Call history list
-    history/[id]/page.tsx            Call detail
-    api/calls/route.ts               Save call, list calls
-    api/calls/[id]/sync/route.ts     Fetch AI analysis + recording from Vapi
-  components/                        Call screen, chat, badges, insights
-  hooks/useVoiceCall.ts              Vapi call state, timer, live transcript
-  hooks/useSaveCall.ts               Save call, then wait for analysis + recording
-  lib/assistant.ts                   Sales prompt and voice settings
-  lib/analysis.ts                    AI summary + status prompt and schema (run by Vapi)
-  lib/product.ts                     Product being sold
-supabase/schema.sql                  Database table
-```
+- No login. Anyone with the link can make calls and see the call history.
+- Recording and summary depend on Vapi finishing its processing. If they are not ready yet, use "Refresh results" on the call page.
+- Hindi speech recognition works best with Hinglish (Hindi mixed with English words).

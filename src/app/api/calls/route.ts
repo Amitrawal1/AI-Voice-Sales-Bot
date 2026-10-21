@@ -15,16 +15,6 @@ const CreateCallBody = z.object({
   ),
 });
 
-export async function GET() {
-  const { data, error } = await getSupabase()
-    .from("calls")
-    .select("*")
-    .order("started_at", { ascending: false })
-    .limit(100);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data);
-}
-
 export async function POST(req: Request) {
   const parsed = CreateCallBody.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: "Invalid call data" }, { status: 400 });
