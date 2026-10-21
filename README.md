@@ -4,7 +4,7 @@ Voice bot that calls you from the browser and tries to sell **FlowCRM**, a made-
 
 Built for the Sankar Group intern assignment.
 
-**Live:** _add Vercel link_
+**Live:** _https://ai-voice-sales-bot-eta.vercel.app_
 
 ## Features
 
