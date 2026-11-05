@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { CallInsights } from "@/components/CallInsights";
 import { ChatTranscript } from "@/components/ChatTranscript";
 import { SetupNotice } from "@/components/SetupNotice";
-import { SyncFromVapiButton } from "@/components/SyncFromVapiButton";
+import { SyncResultsButton } from "@/components/SyncResultsButton";
 import { getCall } from "@/lib/calls";
 import { formatDateTime, formatDuration } from "@/lib/format";
 import type { CallRecord } from "@/lib/types";
@@ -38,7 +38,7 @@ export default async function CallDetailPage({ params }: { params: Promise<{ id:
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <CallInsights
             call={call}
-            refreshAction={call.vapi_call_id ? <SyncFromVapiButton callId={call.id} /> : undefined}
+            refreshAction={call.call_id ? <SyncResultsButton callId={call.id} /> : undefined}
           />
         </section>
 

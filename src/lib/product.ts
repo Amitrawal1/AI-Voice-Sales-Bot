@@ -1,6 +1,8 @@
 // The SaaS product the bot sells. Edit this file to pitch a different product.
 export const PRODUCT = {
   name: "FlowCRM",
+  // How the name is written in Hindi replies, so the Hindi voice pronounces it naturally.
+  nameHindi: "फ़्लो सीआरएम",
   tagline: "The simple CRM for small businesses in India",
   description:
     "FlowCRM helps small teams track leads, automate WhatsApp and email follow-ups, and see their whole sales pipeline in one place.",

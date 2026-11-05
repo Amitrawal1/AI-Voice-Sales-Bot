@@ -3,14 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3001",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 3001",
     "lint": "eslint"
   },
   "dependencies": {
+    "@pipecat-ai/client-js": "^1.16.0",
+    "@pipecat-ai/small-webrtc-transport": "^1.11.2",
     "@supabase/supabase-js": "^2.118.0",
-    "@vapi-ai/web": "^3.0.0",
     "next": "^15.5.28",
     "react": "^19.1.10",
     "react-dom": "^19.1.10",

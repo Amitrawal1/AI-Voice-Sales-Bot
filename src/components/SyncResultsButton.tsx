@@ -3,8 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-// Shown when a saved call is missing its recording or AI summary; asks the server to check Vapi again.
-export function SyncFromVapiButton({ callId }: { callId: string }) {
+// Shown when a saved call is missing its recording or AI summary; asks the server to fetch them again.
+export function SyncResultsButton({ callId }: { callId: string }) {
   const router = useRouter();
   const [state, setState] = useState<"idle" | "loading" | "error">("idle");
 
@@ -27,9 +27,9 @@ export function SyncFromVapiButton({ callId }: { callId: string }) {
         disabled={state === "loading"}
         className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-60"
       >
-        {state === "loading" ? "Checking Vapi…" : "Refresh results"}
+        {state === "loading" ? "Checking…" : "Refresh results"}
       </button>
-      {state === "error" && <span className="text-xs text-red-600">Could not reach Vapi.</span>}
+      {state === "error" && <span className="text-xs text-red-600">Could not get the results.</span>}
     </div>
   );
 }

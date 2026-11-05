@@ -25,7 +25,7 @@ export type TranscriptLine = {
 
 export type CallRecord = {
   id: string;
-  vapi_call_id: string | null;
+  call_id: string | null;
   started_at: string;
   ended_at: string | null;
   duration_sec: number;

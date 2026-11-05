@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type Vapi from "@vapi-ai/web";
-import { buildAssistant, type CallLanguage } from "@/lib/assistant";
+import type { BotOutputData, PipecatClient, TranscriptData } from "@pipecat-ai/client-js";
+import type { CallLanguage } from "@/lib/assistant";
 import type { TranscriptLine } from "@/lib/types";
 
 export type CallStatus = "idle" | "connecting" | "live" | "ending" | "ended" | "error";
@@ -18,23 +18,28 @@ export type FinishedCall = {
 
 type Partial = { role: TranscriptLine["role"]; text: string } | null;
 
-type VapiTranscriptMessage = {
-  type: "transcript";
-  role: "assistant" | "user";
-  transcriptType: "partial" | "final";
-  transcript: string;
-};
-
-function isTranscript(msg: unknown): msg is VapiTranscriptMessage {
-  return typeof msg === "object" && msg !== null && (msg as { type?: string }).type === "transcript";
+function iceServers(): RTCIceServer[] {
+  const servers: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
+  const turn = process.env.NEXT_PUBLIC_TURN_URL;
+  if (turn) {
+    servers.push({
+      urls: turn,
+      username: process.env.NEXT_PUBLIC_TURN_USERNAME,
+      credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL,
+    });
+  }
+  return servers;
 }
 
+// Browser side of a call to the Pipecat voice server (voice-server/), over WebRTC.
 export function useVoiceCall() {
-  const vapiRef = useRef<Vapi | null>(null);
+  const clientRef = useRef<PipecatClient | null>(null);
   const callIdRef = useRef<string | null>(null);
   const startedAtRef = useRef<number | null>(null);
   const languageRef = useRef<CallLanguage>("en");
   const transcriptRef = useRef<TranscriptLine[]>([]);
+  const spokenSegmentsRef = useRef<Set<number>>(new Set());
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const [status, setStatus] = useState<CallStatus>("idle");
   const [transcript, setTranscript] = useState<TranscriptLine[]>([]);
@@ -56,91 +61,141 @@ export function useVoiceCall() {
     setTranscript(next);
   }, []);
 
-  const getVapi = useCallback(async () => {
-    if (vapiRef.current) return vapiRef.current;
-    const key = process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY;
-    if (!key) throw new Error("NEXT_PUBLIC_VAPI_PUBLIC_KEY is missing in .env.local");
-
-    // Imported lazily because the SDK touches browser-only APIs.
-    const { default: VapiClient } = await import("@vapi-ai/web");
-    const vapi = new VapiClient(key);
-
-    vapi.on("call-start", () => {
-      startedAtRef.current = Date.now();
-      setStatus("live");
-    });
-    vapi.on("speech-start", () => setBotSpeaking(true));
-    vapi.on("speech-end", () => setBotSpeaking(false));
-    vapi.on("message", (msg: unknown) => {
-      if (!isTranscript(msg) || !msg.transcript.trim()) return;
-      if (msg.transcriptType === "partial") {
-        setPartial({ role: msg.role, text: msg.transcript });
-      } else {
+  const onUserTranscript = useCallback(
+    (data: TranscriptData) => {
+      const text = data.text.trim();
+      if (!text) return;
+      if (data.final) {
         setPartial(null);
-        addFinal(msg.role, msg.transcript.trim());
+        addFinal("user", text);
+      } else {
+        setPartial({ role: "user", text });
       }
-    });
-    vapi.on("call-end", () => {
-      const started = startedAtRef.current;
-      const ended = Date.now();
-      setBotSpeaking(false);
-      setPartial(null);
-      setStatus((s) => (s === "error" ? s : "ended"));
-      // A call that never connected has nothing to save.
-      if (!started) return;
-      setFinishedCall({
-        callId: callIdRef.current,
-        language: languageRef.current,
-        startedAt: new Date(started).toISOString(),
-        endedAt: new Date(ended).toISOString(),
-        durationSec: Math.round((ended - started) / 1000),
-        transcript: transcriptRef.current,
-      });
-    });
-    vapi.on("error", (e: unknown) => {
-      console.error("Vapi error", e);
-      const message =
-        (e as { error?: { message?: string } })?.error?.message ??
-        (e as { message?: string })?.message ??
-        "Something went wrong with the call.";
-      setError(typeof message === "string" ? message : "Something went wrong with the call.");
-      setStatus("error");
-    });
+    },
+    [addFinal],
+  );
 
-    vapiRef.current = vapi;
-    return vapi;
-  }, [addFinal]);
+  // Each sentence is reported once it has been spoken, so interrupted text never shows up.
+  const onBotOutput = useCallback(
+    (data: BotOutputData) => {
+      const done = data.spoken_status ? data.spoken_status === "completed" : data.spoken;
+      if (!done) return;
+      if (data.segment_id !== undefined) {
+        if (spokenSegmentsRef.current.has(data.segment_id)) return;
+        spokenSegmentsRef.current.add(data.segment_id);
+      }
+      const text = (data.spoken_progress?.accumulated_text || data.text).trim();
+      if (text) addFinal("assistant", text);
+    },
+    [addFinal],
+  );
+
+  const finish = useCallback(() => {
+    const started = startedAtRef.current;
+    const ended = Date.now();
+    clientRef.current = null;
+    if (audioRef.current) audioRef.current.srcObject = null;
+    setBotSpeaking(false);
+    setPartial(null);
+    setStatus((s) => (s === "error" ? s : "ended"));
+    // A call that never connected has nothing to save.
+    if (!started) return;
+    startedAtRef.current = null;
+    setFinishedCall({
+      callId: callIdRef.current,
+      language: languageRef.current,
+      startedAt: new Date(started).toISOString(),
+      endedAt: new Date(ended).toISOString(),
+      durationSec: Math.round((ended - started) / 1000),
+      transcript: transcriptRef.current,
+    });
+  }, []);
 
   const start = useCallback(
     async (language: CallLanguage) => {
+      const serverUrl = process.env.NEXT_PUBLIC_VOICE_SERVER_URL?.replace(/\/$/, "");
       setError(null);
       setFinishedCall(null);
       setTranscript([]);
       setPartial(null);
       setDurationSec(0);
       transcriptRef.current = [];
-      callIdRef.current = null;
+      spokenSegmentsRef.current = new Set();
+      callIdRef.current = crypto.randomUUID();
       startedAtRef.current = null;
       languageRef.current = language;
+
+      if (!serverUrl) {
+        setError("NEXT_PUBLIC_VOICE_SERVER_URL is missing in .env.local");
+        setStatus("error");
+        return;
+      }
       setStatus("connecting");
 
       try {
-        const vapi = await getVapi();
-        const call = await vapi.start(buildAssistant(language));
-        if (!call) throw new Error("Could not start the call. Check your microphone permission.");
-        callIdRef.current = call.id;
+        // Imported lazily because the SDK touches browser-only APIs.
+        const [{ PipecatClient }, { SmallWebRTCTransport }] = await Promise.all([
+          import("@pipecat-ai/client-js"),
+          import("@pipecat-ai/small-webrtc-transport"),
+        ]);
+        const client = new PipecatClient({
+          transport: new SmallWebRTCTransport({ iceServers: iceServers() }),
+          enableMic: true,
+          enableCam: false,
+          callbacks: {
+            onBotReady: () => {
+              startedAtRef.current = Date.now();
+              setStatus("live");
+            },
+            // Play the bot's voice.
+            onTrackStarted: (track, participant) => {
+              if (track.kind !== "audio" || participant?.local) return;
+              const audio = audioRef.current ?? new Audio();
+              audio.autoplay = true;
+              audio.srcObject = new MediaStream([track]);
+              audioRef.current = audio;
+              audio.play().catch((e) => console.error("Could not play bot audio", e));
+            },
+            onBotStartedSpeaking: () => setBotSpeaking(true),
+            onBotStoppedSpeaking: () => setBotSpeaking(false),
+            onUserTranscript,
+            onBotOutput,
+            onDisconnected: finish,
+            onError: (message) => {
+              console.error("Voice server error", message);
+              const data = message.data as { message?: string; fatal?: boolean } | undefined;
+              if (data?.fatal === false) return;
+              setError(data?.message ?? "Something went wrong with the call.");
+              setStatus("error");
+            },
+            onDeviceError: () => {
+              setError("Could not use the microphone. Check the browser permission.");
+              setStatus("error");
+            },
+          },
+        });
+        clientRef.current = client;
+        await client.connect({
+          webrtcRequestParams: {
+            endpoint: `${serverUrl}/api/offer`,
+            requestData: { callId: callIdRef.current, language },
+          },
+        });
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Could not start the call.");
+        console.error(e);
+        setError(e instanceof Error ? e.message : "Could not reach the voice server.");
         setStatus("error");
+        await clientRef.current?.disconnect().catch(() => {});
       }
     },
-    [getVapi],
+    [finish, onBotOutput, onUserTranscript],
   );
 
   const end = useCallback(async () => {
     setStatus("ending");
-    await vapiRef.current?.stop();
-  }, []);
+    if (clientRef.current) await clientRef.current.disconnect();
+    else finish();
+  }, [finish]);
 
   // Call timer.
   useEffect(() => {
@@ -154,8 +209,7 @@ export function useVoiceCall() {
   // Hang up if the user navigates away mid-call.
   useEffect(() => {
     return () => {
-      vapiRef.current?.stop();
-      vapiRef.current?.removeAllListeners();
+      clientRef.current?.disconnect();
     };
   }, []);
 

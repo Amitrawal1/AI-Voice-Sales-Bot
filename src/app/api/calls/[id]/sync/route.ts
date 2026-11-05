@@ -1,14 +1,16 @@
 import { NextResponse } from "next/server";
+import { analyzeTranscript } from "@/lib/llm";
 import { getSupabase } from "@/lib/supabase";
 import type { CallRecord } from "@/lib/types";
-import { getVapiCall } from "@/lib/vapi";
+import { getVoiceServerCall } from "@/lib/voiceServer";
 
 export const maxDuration = 60;
 
-const ATTEMPTS = 15;
-const DELAY_MS = 3000;
+const ATTEMPTS = 8;
+const DELAY_MS = 1500;
 
-// Vapi finishes the recording and the AI analysis a few seconds after the call ends, so poll for both.
+// Fills in what isn't known when the call is saved: the recording (written by the voice
+// server a moment after hang-up) and the summary + sales status (from Sarvam-30B).
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = getSupabase();
@@ -16,31 +18,49 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const { data, error } = await supabase.from("calls").select("*").eq("id", id).single();
   if (error || !data) return NextResponse.json({ error: "Call not found" }, { status: 404 });
   let call = data as CallRecord;
-  if (!call.vapi_call_id || (call.recording_url && call.status)) return NextResponse.json(call);
+  if (!call.call_id || (call.recording_url && call.status)) return NextResponse.json(call);
 
-  try {
-    for (let i = 0; i < ATTEMPTS; i++) {
-      const vapi = await getVapiCall(call.vapi_call_id!);
-      const update = {
-        ...(!call.recording_url && vapi.recordingUrl ? { recording_url: vapi.recordingUrl } : {}),
-        ...(!call.status && vapi.analysis ? vapi.analysis : {}),
-      };
-      if (Object.keys(update).length > 0) {
-        const { data: updated, error: updateError } = await supabase
-          .from("calls")
-          .update(update)
-          .eq("id", id)
-          .select()
-          .single();
-        if (updateError) throw updateError;
-        call = updated as CallRecord;
-      }
-      if (call.recording_url && call.status) break;
-      await new Promise((r) => setTimeout(r, DELAY_MS));
+  const save = async (update: Partial<CallRecord>) => {
+    const { data: updated, error: updateError } = await supabase
+      .from("calls")
+      .update(update)
+      .eq("id", id)
+      .select()
+      .single();
+    if (updateError) throw updateError;
+    call = updated as CallRecord;
+  };
+
+  const problems: string[] = [];
+
+  if (!call.status) {
+    try {
+      await save(await analyzeTranscript(call.transcript));
+    } catch (e) {
+      console.error("Call analysis failed", e);
+      problems.push("the summary");
     }
-  } catch (e) {
-    console.error("Syncing call from Vapi failed", e);
-    return NextResponse.json({ error: "Could not get the call results from Vapi" }, { status: 502 });
+  }
+
+  if (!call.recording_url) {
+    try {
+      for (let i = 0; i < ATTEMPTS; i++) {
+        const result = await getVoiceServerCall(call.call_id);
+        if (result?.recordingUrl) {
+          await save({ recording_url: result.recordingUrl });
+          break;
+        }
+        if (result?.ended) break; // ended without a recording
+        await new Promise((r) => setTimeout(r, DELAY_MS));
+      }
+    } catch (e) {
+      console.error("Fetching the recording failed", e);
+      problems.push("the recording");
+    }
+  }
+
+  if (problems.length > 0) {
+    return NextResponse.json({ error: `Could not get ${problems.join(" or ")}` }, { status: 502 });
   }
   return NextResponse.json(call);
 }

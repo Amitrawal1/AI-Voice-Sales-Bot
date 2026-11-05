@@ -23,14 +23,14 @@ export async function POST(req: Request) {
   const { data: row, error } = await getSupabase()
     .from("calls")
     .insert({
-      vapi_call_id: body.callId,
+      call_id: body.callId,
       language: body.language,
       started_at: body.startedAt,
       ended_at: body.endedAt,
       duration_sec: body.durationSec,
       transcript: body.transcript,
       consent_given: body.consent,
-      // The AI analysis comes from Vapi later; a silent call is classified right away.
+      // The AI analysis is added by /sync; a silent call is classified right away.
       ...noResponseAnalysis(body.transcript),
     })
     .select()

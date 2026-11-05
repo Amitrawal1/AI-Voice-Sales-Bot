@@ -10,7 +10,7 @@ type SaveState =
   | { phase: "saved"; call: CallRecord; syncing: boolean; syncError?: string }
   | { phase: "error"; message: string };
 
-// Saves a finished call, then waits for Vapi's recording and AI analysis.
+// Saves a finished call, then waits for the recording and the AI analysis.
 export function useSaveCall(finished: FinishedCall | null) {
   const [state, setState] = useState<SaveState>({ phase: "idle" });
 
@@ -34,7 +34,7 @@ export function useSaveCall(finished: FinishedCall | null) {
         if (cancelled) return;
 
         const call = data as CallRecord;
-        const needsSync = Boolean(call.vapi_call_id);
+        const needsSync = Boolean(call.call_id);
         setState({ phase: "saved", call, syncing: needsSync });
         if (!needsSync) return;
 

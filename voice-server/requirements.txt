@@ -1,0 +1,9 @@
+# Voice server (Pipecat + Whisper Apex + Indic Parler-TTS). Python 3.11 or 3.12, CUDA GPU.
+# vLLM runs in its own environment, see scripts/serve_llm.sh.
+pipecat-ai[webrtc,silero,whisper,openai]==1.15.0
+parler-tts @ git+https://github.com/huggingface/parler-tts.git
+fastapi>=0.115
+uvicorn>=0.32
+aiohttp>=3.10
+python-dotenv>=1.0
+soundfile>=0.12.1

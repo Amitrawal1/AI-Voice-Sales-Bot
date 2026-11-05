@@ -1,10 +1,10 @@
-import type { StructuredDataPlan } from "@vapi-ai/web/dist/api";
+import { z } from "zod";
 import { PRODUCT } from "./product";
 import { SALES_STATUSES, type CallAnalysis, type TranscriptLine } from "./types";
 
-// Vapi runs this analysis at the end of every call, using the same credits as the call itself.
+// Post-call analysis prompt, run on the self-hosted Sarvam-30B (see llm.ts).
 
-const PROMPT = `You analyse sales call transcripts for ${PRODUCT.name} (${PRODUCT.tagline}).
+export const ANALYSIS_PROMPT = `You analyse sales call transcripts for ${PRODUCT.name} (${PRODUCT.tagline}).
 Write everything in English, even if the call was in Hindi. Keep each list item short. Use an empty list when nothing applies.
 
 Fields:
@@ -23,30 +23,33 @@ Status rules:
 - No Response: the customer said nothing meaningful.
 If both Converted and Demo Requested apply, choose Converted.
 
-JSON Schema:
-{{schema}}
+Respond with only the JSON object.`;
 
-Respond with only the JSON.`;
+export const AnalysisSchema = z.object({
+  summary: z.string(),
+  requirements: z.array(z.string()),
+  objections: z.array(z.string()),
+  next_steps: z.array(z.string()),
+  status: z.enum(SALES_STATUSES),
+});
 
-export const structuredDataPlan: StructuredDataPlan = {
-  enabled: true,
-  timeoutSeconds: 30,
-  schema: {
-    type: "object",
-    properties: {
-      summary: { type: "string" },
-      requirements: { type: "array", items: { type: "string" } },
-      objections: { type: "array", items: { type: "string" } },
-      next_steps: { type: "array", items: { type: "string" } },
-      status: { type: "string", enum: [...SALES_STATUSES] },
-    },
-    required: ["summary", "requirements", "objections", "next_steps", "status"],
+// JSON Schema handed to vLLM so the reply is forced into this shape.
+export const ANALYSIS_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    summary: { type: "string" },
+    requirements: { type: "array", items: { type: "string" } },
+    objections: { type: "array", items: { type: "string" } },
+    next_steps: { type: "array", items: { type: "string" } },
+    status: { type: "string", enum: [...SALES_STATUSES] },
   },
-  messages: [
-    { role: "system", content: PROMPT },
-    { role: "user", content: "Here is the transcript:\n\n{{transcript}}\n\nThe call ended because: {{endedReason}}" },
-  ],
+  required: ["summary", "requirements", "objections", "next_steps", "status"],
+  additionalProperties: false,
 };
+
+export function formatTranscript(transcript: TranscriptLine[]) {
+  return transcript.map((l) => `${l.role === "assistant" ? "Priya" : "Customer"}: ${l.text}`).join("\n");
+}
 
 // No need to analyse a call where the customer never spoke.
 export function noResponseAnalysis(transcript: TranscriptLine[]): CallAnalysis | null {

@@ -1,7 +1,7 @@
 -- Run this once in the Supabase SQL editor.
 create table if not exists calls (
   id             uuid primary key default gen_random_uuid(),
-  vapi_call_id   text unique,
+  call_id        text unique,                          -- id of the call on the voice server
   started_at     timestamptz not null default now(),
   ended_at       timestamptz,
   duration_sec   integer not null default 0,
@@ -24,3 +24,6 @@ create index if not exists calls_started_at_idx on calls (started_at desc);
 
 -- Only the server (service role key) touches this table.
 alter table calls enable row level security;
+
+-- Upgrading a database created before the switch from Vapi to the self-hosted voice server:
+--   alter table calls rename column vapi_call_id to call_id;
